@@ -44,6 +44,8 @@ services:
     healthcheck:
       <<: *hc-defaults
       start_period: 30s
+      # kafka-broker-api-versions.sh sobe uma JVM propria a cada chamada; 5s (padrao) e curto sob carga.
+      timeout: 10s
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
 
   # --- API Gateway (RNF-009): unico ponto de entrada das requisicoes externas ---
