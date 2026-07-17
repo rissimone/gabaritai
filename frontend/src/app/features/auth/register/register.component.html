@@ -1,0 +1,73 @@
+<main class="auth-layout">
+  <div class="auth-card">
+    <h1>Criar conta</h1>
+    <p class="subtitle">Comece a organizar seus estudos para o concurso.</p>
+
+    @if (successMessage()) {
+      <p class="form-success" role="status">{{ successMessage() }}</p>
+    }
+    @if (errorMessage()) {
+      <p class="form-error" role="alert">{{ errorMessage() }}</p>
+    }
+
+    <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      <div class="form-field">
+        <label for="name">Nome</label>
+        <input
+          id="name"
+          type="text"
+          formControlName="name"
+          autocomplete="name"
+          [attr.aria-invalid]="form.controls.name.invalid && form.controls.name.touched"
+        />
+        @if (form.controls.name.invalid && form.controls.name.touched) {
+          <span class="field-error">Informe seu nome.</span>
+        }
+      </div>
+
+      <div class="form-field">
+        <label for="email">E-mail</label>
+        <input
+          id="email"
+          type="email"
+          formControlName="email"
+          autocomplete="email"
+          [attr.aria-invalid]="form.controls.email.invalid && form.controls.email.touched"
+        />
+        @if (form.controls.email.invalid && form.controls.email.touched) {
+          <span class="field-error">Informe um e-mail valido.</span>
+        }
+      </div>
+
+      <div class="form-field">
+        <label for="password">Senha</label>
+        <input
+          id="password"
+          type="password"
+          formControlName="password"
+          autocomplete="new-password"
+          [attr.aria-invalid]="form.controls.password.invalid && form.controls.password.touched"
+        />
+        @if (form.controls.password.invalid && form.controls.password.touched) {
+          <span class="field-error">Minimo de 8 caracteres, com letras e numeros.</span>
+        }
+      </div>
+
+      <label class="form-field-checkbox">
+        <input type="checkbox" formControlName="termsAccepted" />
+        <span>Li e aceito os termos de uso e a politica de privacidade.</span>
+      </label>
+      @if (form.controls.termsAccepted.invalid && form.controls.termsAccepted.touched) {
+        <p class="field-error">E necessario aceitar os termos para continuar.</p>
+      }
+
+      <button type="submit" class="btn-primary" [disabled]="submitting()">
+        {{ submitting() ? 'Enviando...' : 'Criar conta' }}
+      </button>
+    </form>
+
+    <div class="auth-links">
+      <a routerLink="/login">Ja tenho conta — entrar</a>
+    </div>
+  </div>
+</main>

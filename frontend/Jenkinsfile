@@ -1,0 +1,89 @@
+// Pipeline do frontend Angular (RNF-081).
+pipeline {
+    agent { label 'node20' }
+
+    environment {
+        SERVICE_NAME = 'frontend'
+        IMAGE_NAME   = "gabaritai/${SERVICE_NAME}"
+        IMAGE_TAG    = "${env.BUILD_NUMBER}-${env.GIT_COMMIT[0..7]}"
+    }
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    stages {
+        stage('Checkout') {
+            steps { checkout scm }
+        }
+
+        stage('Instalar dependencias') {
+            steps { sh 'npm ci' }
+        }
+
+        stage('Verificar formatacao') {
+            steps { sh 'npm run format:check' }
+        }
+
+        stage('Lint') {
+            steps { sh 'npm run lint' }
+        }
+
+        stage('Testes unitarios') {
+            steps {
+                sh 'npm test -- --watch=false --browsers=ChromeHeadless --code-coverage'
+            }
+            post {
+                always { junit allowEmptyResults: true, testResults: '**/test-results/*.xml' }
+            }
+        }
+
+        stage('Build de producao') {
+            steps { sh 'npm run build -- --configuration production' }
+        }
+
+        stage('Analise de vulnerabilidades') {
+            steps {
+                // TODO: falhar o pipeline em vulnerabilidades criticas (RNF-036, RNF-083)
+                sh 'npm audit --audit-level=high || true'
+            }
+        }
+
+        stage('Build da imagem Docker') {
+            steps {
+                sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+            }
+        }
+
+        stage('Publicar imagem') {
+            steps {
+                // TODO: credenciais do registry via Jenkins Credentials (RNF-086)
+                sh "echo 'docker push ${IMAGE_NAME}:${IMAGE_TAG}'"
+            }
+        }
+
+        stage('Implantar') {
+            when { branch 'main' }
+            steps {
+                // TODO: implantacao controlada com aprovacao manual (RNF-093)
+                sh "echo 'deploy ${IMAGE_NAME}:${IMAGE_TAG}'"
+            }
+        }
+
+        stage('Smoke test') {
+            when { branch 'main' }
+            steps {
+                // TODO: verificar carregamento do frontend apos deploy (RNF-098)
+                sh 'echo smoke-test-placeholder'
+            }
+        }
+    }
+
+    post {
+        always {
+            // TODO: notificar resultado via e-mail/Slack/GitHub Checks (RNF-089)
+            echo "Pipeline de ${SERVICE_NAME} finalizado com status: ${currentBuild.currentResult}"
+        }
+    }
+}

@@ -1,0 +1,353 @@
+# Infraestrutura local do GabaritAI (RNF-015 a RNF-025, secao 17 de requisitos-nao-funcionais.md).
+# Uso: cp .env.example .env && docker compose up --build
+
+x-hc-defaults: &hc-defaults
+  interval: 10s
+  timeout: 5s
+  retries: 5
+
+x-postgres-common: &postgres-common
+  image: postgres:16.4-alpine
+  restart: unless-stopped
+  networks:
+    - gabaritai-data
+
+x-service-common: &service-common
+  restart: unless-stopped
+  networks:
+    - gabaritai-application
+    - gabaritai-data
+
+services:
+  # --- Mensageria (RNF-008: processamento assincrono de edital, IA, notificacoes) ---
+  # Apache Kafka em modo KRaft (sem Zookeeper), no de broker+controller unico (ADR-0003).
+  kafka:
+    image: apache/kafka:3.9.2
+    container_name: gabaritai-kafka
+    restart: unless-stopped
+    networks:
+      - gabaritai-application
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      <<: *hc-defaults
+      start_period: 30s
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+
+  # --- API Gateway (RNF-009): unico ponto de entrada das requisicoes externas ---
+  api-gateway:
+    build:
+      context: ../../api-gateway
+    container_name: gabaritai-api-gateway
+    restart: unless-stopped
+    networks:
+      - gabaritai-public
+      - gabaritai-application
+    environment:
+      SERVER_PORT: "8080"
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:4200}
+      AUTH_SERVICE_URI: http://auth-service:8081
+      USER_SERVICE_URI: http://user-service:8082
+      EDITAL_SERVICE_URI: http://edital-service:8083
+      STUDY_PLAN_SERVICE_URI: http://study-plan-service:8084
+      AI_SERVICE_URI: http://ai-service:8085
+      NOTIFICATION_SERVICE_URI: http://notification-service:8086
+      # Mesmo segredo do auth-service (ADR abaixo) — necessario para validar a assinatura do JWT.
+      JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET is required (min. 32 caracteres), copy .env.example to .env}
+    ports:
+      - "8080:8080"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      edital-service:
+        condition: service_healthy
+      study-plan-service:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+    healthcheck:
+      <<: *hc-defaults
+      start_period: 40s
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health/liveness"]
+
+  # --- Frontend (Angular) ---
+  frontend:
+    build:
+      context: ../../frontend
+    container_name: gabaritai-frontend
+    restart: unless-stopped
+    networks:
+      - gabaritai-public
+    ports:
+      - "4200:8080"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      <<: *hc-defaults
+      start_period: 15s
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+
+  # --- Reverse proxy (RNF-018): unico ponto exposto publicamente junto com frontend/gateway ---
+  reverse-proxy:
+    image: nginxinc/nginx-unprivileged:1.27-alpine
+    container_name: gabaritai-reverse-proxy
+    restart: unless-stopped
+    networks:
+      - gabaritai-public
+    volumes:
+      - ./nginx/reverse-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "80:8080"
+    depends_on:
+      frontend:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      <<: *hc-defaults
+      start_period: 15s
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/"]
+
+  # --- Microsservicos e bancos dedicados (RNF-003, RNF-006) ---
+
+  auth-db:
+    <<: *postgres-common
+    container_name: gabaritai-auth-db
+    environment:
+      POSTGRES_DB: ${AUTH_DB_NAME:-auth_db}
+      POSTGRES_USER: ${AUTH_DB_USER:-auth_db_user}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:?AUTH_DB_PASSWORD is required, copy .env.example to .env}
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data
+    healthcheck:
+      <<: *hc-defaults
+      test: ["CMD-SHELL", "pg_isready -U ${AUTH_DB_USER:-auth_db_user} -d ${AUTH_DB_NAME:-auth_db}"]
+
+  auth-service:
+    build:
+      context: ../../services/auth-service
+    container_name: gabaritai-auth-service
+    <<: *service-common
+    environment:
+      SERVER_PORT: "8081"
+      DB_HOST: auth-db
+      DB_PORT: "5432"
+      DB_NAME: ${AUTH_DB_NAME:-auth_db}
+      DB_USERNAME: ${AUTH_DB_USER:-auth_db_user}
+      DB_PASSWORD: ${AUTH_DB_PASSWORD:?AUTH_DB_PASSWORD is required, copy .env.example to .env}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET is required (min. 32 caracteres), copy .env.example to .env}
+    depends_on:
+      auth-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      <<: *hc-defaults
+      start_period: 40s
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/actuator/health/liveness"]
+
+  user-db:
+    <<: *postgres-common
+    container_name: gabaritai-user-db
+    environment:
+      POSTGRES_DB: ${USER_DB_NAME:-user_db}
+      POSTGRES_USER: ${USER_DB_USER:-user_db_user}
+      POSTGRES_PASSWORD: ${USER_DB_PASSWORD:?USER_DB_PASSWORD is required, copy .env.example to .env}
+    volumes:
+      - user-db-data:/var/lib/postgresql/data
+    healthcheck:
+      <<: *hc-defaults
+      test: ["CMD-SHELL", "pg_isready -U ${USER_DB_USER:-user_db_user} -d ${USER_DB_NAME:-user_db}"]
+
+  user-service:
+    build:
+      context: ../../services/user-service
+    container_name: gabaritai-user-service
+    <<: *service-common
+    environment:
+      SERVER_PORT: "8082"
+      DB_HOST: user-db
+      DB_PORT: "5432"
+      DB_NAME: ${USER_DB_NAME:-user_db}
+      DB_USERNAME: ${USER_DB_USER:-user_db_user}
+      DB_PASSWORD: ${USER_DB_PASSWORD:?USER_DB_PASSWORD is required, copy .env.example to .env}
+    depends_on:
+      user-db:
+        condition: service_healthy
+    healthcheck:
+      <<: *hc-defaults
+      start_period: 40s
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/actuator/health/liveness"]
+
+  edital-db:
+    <<: *postgres-common
+    container_name: gabaritai-edital-db
+    environment:
+      POSTGRES_DB: ${EDITAL_DB_NAME:-edital_db}
+      POSTGRES_USER: ${EDITAL_DB_USER:-edital_db_user}
+      POSTGRES_PASSWORD: ${EDITAL_DB_PASSWORD:?EDITAL_DB_PASSWORD is required, copy .env.example to .env}
+    volumes:
+      - edital-db-data:/var/lib/postgresql/data
+    healthcheck:
+      <<: *hc-defaults
+      test: ["CMD-SHELL", "pg_isready -U ${EDITAL_DB_USER:-edital_db_user} -d ${EDITAL_DB_NAME:-edital_db}"]
+
+  edital-service:
+    build:
+      context: ../../services/edital-service
+    container_name: gabaritai-edital-service
+    <<: *service-common
+    environment:
+      SERVER_PORT: "8083"
+      DB_HOST: edital-db
+      DB_PORT: "5432"
+      DB_NAME: ${EDITAL_DB_NAME:-edital_db}
+      DB_USERNAME: ${EDITAL_DB_USER:-edital_db_user}
+      DB_PASSWORD: ${EDITAL_DB_PASSWORD:?EDITAL_DB_PASSWORD is required, copy .env.example to .env}
+    depends_on:
+      edital-db:
+        condition: service_healthy
+    healthcheck:
+      <<: *hc-defaults
+      start_period: 40s
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/actuator/health/liveness"]
+
+  study-plan-db:
+    <<: *postgres-common
+    container_name: gabaritai-study-plan-db
+    environment:
+      POSTGRES_DB: ${STUDY_PLAN_DB_NAME:-study_plan_db}
+      POSTGRES_USER: ${STUDY_PLAN_DB_USER:-study_plan_db_user}
+      POSTGRES_PASSWORD: ${STUDY_PLAN_DB_PASSWORD:?STUDY_PLAN_DB_PASSWORD is required, copy .env.example to .env}
+    volumes:
+      - study-plan-db-data:/var/lib/postgresql/data
+    healthcheck:
+      <<: *hc-defaults
+      test: ["CMD-SHELL", "pg_isready -U ${STUDY_PLAN_DB_USER:-study_plan_db_user} -d ${STUDY_PLAN_DB_NAME:-study_plan_db}"]
+
+  study-plan-service:
+    build:
+      context: ../../services/study-plan-service
+    container_name: gabaritai-study-plan-service
+    <<: *service-common
+    environment:
+      SERVER_PORT: "8084"
+      DB_HOST: study-plan-db
+      DB_PORT: "5432"
+      DB_NAME: ${STUDY_PLAN_DB_NAME:-study_plan_db}
+      DB_USERNAME: ${STUDY_PLAN_DB_USER:-study_plan_db_user}
+      DB_PASSWORD: ${STUDY_PLAN_DB_PASSWORD:?STUDY_PLAN_DB_PASSWORD is required, copy .env.example to .env}
+    depends_on:
+      study-plan-db:
+        condition: service_healthy
+    healthcheck:
+      <<: *hc-defaults
+      start_period: 40s
+      test: ["CMD", "wget", "-qO-", "http://localhost:8084/actuator/health/liveness"]
+
+  ai-db:
+    <<: *postgres-common
+    container_name: gabaritai-ai-db
+    environment:
+      POSTGRES_DB: ${AI_DB_NAME:-ai_db}
+      POSTGRES_USER: ${AI_DB_USER:-ai_db_user}
+      POSTGRES_PASSWORD: ${AI_DB_PASSWORD:?AI_DB_PASSWORD is required, copy .env.example to .env}
+    volumes:
+      - ai-db-data:/var/lib/postgresql/data
+    healthcheck:
+      <<: *hc-defaults
+      test: ["CMD-SHELL", "pg_isready -U ${AI_DB_USER:-ai_db_user} -d ${AI_DB_NAME:-ai_db}"]
+
+  ai-service:
+    build:
+      context: ../../services/ai-service
+    container_name: gabaritai-ai-service
+    <<: *service-common
+    environment:
+      SERVER_PORT: "8085"
+      DB_HOST: ai-db
+      DB_PORT: "5432"
+      DB_NAME: ${AI_DB_NAME:-ai_db}
+      DB_USERNAME: ${AI_DB_USER:-ai_db_user}
+      DB_PASSWORD: ${AI_DB_PASSWORD:?AI_DB_PASSWORD is required, copy .env.example to .env}
+    depends_on:
+      ai-db:
+        condition: service_healthy
+    healthcheck:
+      <<: *hc-defaults
+      start_period: 40s
+      test: ["CMD", "wget", "-qO-", "http://localhost:8085/actuator/health/liveness"]
+
+  notification-db:
+    <<: *postgres-common
+    container_name: gabaritai-notification-db
+    environment:
+      POSTGRES_DB: ${NOTIFICATION_DB_NAME:-notification_db}
+      POSTGRES_USER: ${NOTIFICATION_DB_USER:-notification_db_user}
+      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?NOTIFICATION_DB_PASSWORD is required, copy .env.example to .env}
+    volumes:
+      - notification-db-data:/var/lib/postgresql/data
+    healthcheck:
+      <<: *hc-defaults
+      test: ["CMD-SHELL", "pg_isready -U ${NOTIFICATION_DB_USER:-notification_db_user} -d ${NOTIFICATION_DB_NAME:-notification_db}"]
+
+  notification-service:
+    build:
+      context: ../../services/notification-service
+    container_name: gabaritai-notification-service
+    <<: *service-common
+    environment:
+      SERVER_PORT: "8086"
+      DB_HOST: notification-db
+      DB_PORT: "5432"
+      DB_NAME: ${NOTIFICATION_DB_NAME:-notification_db}
+      DB_USERNAME: ${NOTIFICATION_DB_USER:-notification_db_user}
+      DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?NOTIFICATION_DB_PASSWORD is required, copy .env.example to .env}
+    depends_on:
+      notification-db:
+        condition: service_healthy
+    healthcheck:
+      <<: *hc-defaults
+      start_period: 40s
+      test: ["CMD", "wget", "-qO-", "http://localhost:8086/actuator/health/liveness"]
+
+networks:
+  gabaritai-public:
+    name: gabaritai-public
+  gabaritai-application:
+    name: gabaritai-application
+  gabaritai-data:
+    name: gabaritai-data
+  # Redes reservadas para observabilidade e agentes de CI/CD (RNF-017),
+  # ainda sem servicos conectados neste estagio de scaffolding (ver ADR-0001).
+  gabaritai-monitoring:
+    name: gabaritai-monitoring
+  gabaritai-cicd:
+    name: gabaritai-cicd
+
+volumes:
+  kafka-data:
+  auth-db-data:
+  user-db-data:
+  edital-db-data:
+  study-plan-db-data:
+  ai-db-data:
+  notification-db-data:

@@ -1,0 +1,27 @@
+<main class="auth-layout">
+  <div class="auth-card">
+    <h1>Confirmacao de e-mail</h1>
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="subtitle" role="status">Confirmando seu e-mail...</p>
+      }
+      @case ('success') {
+        <p class="form-success" role="status">
+          E-mail confirmado com sucesso! Sua conta ja pode ser usada.
+        </p>
+        <div class="auth-links">
+          <a routerLink="/login">Ir para o login</a>
+        </div>
+      }
+      @case ('missing-token') {
+        <p class="form-error" role="alert">
+          Link de confirmacao invalido: nenhum token foi informado.
+        </p>
+      }
+      @case ('error') {
+        <p class="form-error" role="alert">{{ errorMessage() }}</p>
+      }
+    }
+  </div>
+</main>

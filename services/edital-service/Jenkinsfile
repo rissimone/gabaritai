@@ -1,0 +1,97 @@
+// Pipeline do Edital Service (RNF-078 a RNF-089).
+pipeline {
+    agent { label 'maven-jdk21' }
+
+    environment {
+        SERVICE_NAME = 'edital-service'
+        IMAGE_NAME   = "gabaritai/${SERVICE_NAME}"
+        IMAGE_TAG    = "${env.BUILD_NUMBER}-${env.GIT_COMMIT[0..7]}"
+    }
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    stages {
+        stage('Checkout') {
+            steps { checkout scm }
+        }
+
+        stage('Validar padroes') {
+            steps { sh 'mvn -B validate' }
+        }
+
+        stage('Compilar') {
+            steps { sh 'mvn -B compile' }
+        }
+
+        stage('Testes unitarios e integracao') {
+            steps { sh 'mvn -B verify' }
+            post {
+                always { junit '**/target/surefire-reports/*.xml' }
+            }
+        }
+
+        stage('Analise estatica') {
+            steps {
+                // TODO: apontar para servidor SonarQube quando provisionado (RNF-105)
+                sh 'mvn -B checkstyle:check'
+            }
+        }
+
+        stage('Analise de vulnerabilidades (dependencias)') {
+            steps {
+                // TODO: OWASP Dependency-Check (RNF-036, RNF-108)
+                sh 'mvn -B dependency:tree'
+            }
+        }
+
+        stage('Empacotar') {
+            steps { sh 'mvn -B package -DskipTests' }
+        }
+
+        stage('Build da imagem Docker') {
+            steps {
+                sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+            }
+        }
+
+        stage('Escaneamento da imagem') {
+            steps {
+                // TODO: Trivy (RNF-016, RNF-036)
+                sh "echo 'trivy image ${IMAGE_NAME}:${IMAGE_TAG}'"
+            }
+        }
+
+        stage('Publicar imagem') {
+            steps {
+                // TODO: credenciais do registry via Jenkins Credentials (RNF-086)
+                sh "echo 'docker push ${IMAGE_NAME}:${IMAGE_TAG}'"
+            }
+        }
+
+        stage('Implantar') {
+            when { branch 'main' }
+            steps {
+                // TODO: implantacao controlada com aprovacao manual (RNF-093)
+                sh "echo 'deploy ${IMAGE_NAME}:${IMAGE_TAG}'"
+            }
+        }
+
+        stage('Smoke test / health check') {
+            when { branch 'main' }
+            steps {
+                // TODO: chamar endpoint /actuator/health apos deploy (RNF-098)
+                sh 'echo smoke-test-placeholder'
+            }
+        }
+    }
+
+    post {
+        always {
+            // TODO: notificar resultado via e-mail/Slack/GitHub Checks (RNF-089)
+            echo "Pipeline de ${SERVICE_NAME} finalizado com status: ${currentBuild.currentResult}"
+        }
+    }
+}

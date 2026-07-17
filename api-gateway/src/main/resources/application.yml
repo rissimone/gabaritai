@@ -1,0 +1,80 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      # Cabecalhos padronizados e correlacao de requisicoes (RNF-009, RNF-066)
+      default-filters:
+        - AddResponseHeader=X-Content-Type-Options, nosniff
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
+            allowedMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+            allowedHeaders: '*'
+            allowCredentials: true
+      routes:
+        - id: auth-service
+          uri: ${AUTH_SERVICE_URI:http://auth-service:8081}
+          predicates:
+            - Path=/api/v1/auth/**
+        - id: user-service
+          uri: ${USER_SERVICE_URI:http://user-service:8082}
+          predicates:
+            - Path=/api/v1/usuarios/**
+        - id: edital-service
+          uri: ${EDITAL_SERVICE_URI:http://edital-service:8083}
+          predicates:
+            - Path=/api/v1/concursos/**,/api/v1/editais/**
+        - id: study-plan-service
+          uri: ${STUDY_PLAN_SERVICE_URI:http://study-plan-service:8084}
+          predicates:
+            - Path=/api/v1/planos-de-estudo/**
+        - id: ai-service
+          uri: ${AI_SERVICE_URI:http://ai-service:8085}
+          predicates:
+            - Path=/api/v1/ia/**
+        - id: notification-service
+          uri: ${NOTIFICATION_SERVICE_URI:http://notification-service:8086}
+          predicates:
+            - Path=/api/v1/notificacoes/**
+
+app:
+  jwt:
+    # Deve ser identico ao JWT_SECRET do auth-service, que assina os tokens (RNF-026, RNF-030).
+    secret: ${JWT_SECRET:?defina a variavel de ambiente JWT_SECRET com pelo menos 32 caracteres}
+  security:
+    # Rotas de pre-autenticacao (RF01) e observabilidade — o restante exige Bearer token valido.
+    public-paths:
+      - /api/v1/auth/register
+      - /api/v1/auth/login
+      - /api/v1/auth/email-confirmations
+      - /api/v1/auth/password-resets
+      - /actuator
+      - /v3/api-docs
+      - /swagger-ui
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  health:
+    readiness-state:
+      enabled: true
+    liveness-state:
+      enabled: true
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%X{traceId:-}] %-5level %logger{36} - %msg%n"
+
+# NOTA: rate limiting (RNF-034) ainda depende de Redis e fica para iteracao dedicada.
