@@ -1,0 +1,81 @@
+<main class="auth-layout">
+  <div class="auth-card profile-card">
+    <h1>Meu perfil</h1>
+    <p class="subtitle">Atualize suas informacoes e preferencias de estudo.</p>
+
+    @if (errorMessage()) {
+      <p class="form-error" role="alert">{{ errorMessage() }}</p>
+    }
+    @if (successMessage()) {
+      <p class="form-success" role="status">{{ successMessage() }}</p>
+    }
+
+    @if (loading()) {
+      <p class="subtitle" role="status">Carregando perfil...</p>
+    } @else {
+      <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+        <div class="form-field">
+          <label for="photoUrl">URL da foto</label>
+          <input id="photoUrl" type="text" formControlName="photoUrl" placeholder="https://..." />
+        </div>
+
+        <div class="form-field">
+          <label for="phone">Telefone</label>
+          <input id="phone" type="text" formControlName="phone" placeholder="(11) 99999-0000" />
+        </div>
+
+        <div class="form-field">
+          <label for="timezone">Fuso horario</label>
+          <select id="timezone" formControlName="timezone">
+            @for (tz of timezones; track tz) {
+              <option [value]="tz">{{ tz }}</option>
+            }
+          </select>
+        </div>
+
+        <label class="form-field-checkbox">
+          <input type="checkbox" formControlName="receiveNotifications" />
+          <span>Quero receber notificacoes sobre meus estudos.</span>
+        </label>
+
+        <div class="form-field">
+          <label for="experienceLevel">Experiencia com concursos</label>
+          <select id="experienceLevel" formControlName="experienceLevel">
+            <option value="">Nao informado</option>
+            @for (level of experienceLevels; track level.value) {
+              <option [value]="level.value">{{ level.label }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="form-field">
+          <label for="studyGoal">Objetivo de estudo</label>
+          <input
+            id="studyGoal"
+            type="text"
+            formControlName="studyGoal"
+            placeholder="Ex.: aprovacao no concurso X"
+          />
+        </div>
+
+        <fieldset class="form-field" formGroupName="learningPreferences">
+          <legend>Preferencia de conteudo</legend>
+          @for (pref of learningPreferenceOptions; track pref.value) {
+            <label class="form-field-checkbox">
+              <input type="checkbox" [formControlName]="pref.value" />
+              <span>{{ pref.label }}</span>
+            </label>
+          }
+        </fieldset>
+
+        <button type="submit" class="btn-primary" [disabled]="submitting()">
+          {{ submitting() ? 'Salvando...' : 'Salvar alteracoes' }}
+        </button>
+      </form>
+    }
+
+    <div class="auth-links">
+      <a routerLink="/painel">Voltar ao painel</a>
+    </div>
+  </div>
+</main>
