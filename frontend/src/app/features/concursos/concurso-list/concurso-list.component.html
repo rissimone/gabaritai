@@ -1,0 +1,52 @@
+<main class="auth-layout">
+  <div class="auth-card concursos-card">
+    <h1>Meus concursos</h1>
+    <p class="subtitle">Concursos que voce esta acompanhando.</p>
+
+    @if (errorMessage()) {
+      <p class="form-error" role="alert">{{ errorMessage() }}</p>
+    }
+
+    <div class="form-field">
+      <label for="statusFilter">Filtrar por situacao</label>
+      <select
+        id="statusFilter"
+        [value]="statusFilter()"
+        (change)="onFilterChange($any($event.target).value)"
+      >
+        <option value="">Todas</option>
+        @for (option of statusOptions; track option.value) {
+          <option [value]="option.value">{{ option.label }}</option>
+        }
+      </select>
+    </div>
+
+    @if (loading()) {
+      <p class="subtitle" role="status">Carregando concursos...</p>
+    } @else if (concursos().length === 0) {
+      <p class="subtitle">Nenhum concurso cadastrado ainda.</p>
+    } @else {
+      <ul class="concurso-list">
+        @for (concurso of concursos(); track concurso.id) {
+          <li class="concurso-item">
+            <strong>{{ concurso.orgao }}</strong> — {{ concurso.cargo }}
+            <div class="concurso-meta">
+              {{ concurso.bancaOrganizadora }} · {{ statusLabel(concurso.status) }}
+              @if (concurso.dataProva) {
+                · prova em {{ concurso.dataProva }}
+              }
+            </div>
+          </li>
+        }
+      </ul>
+    }
+
+    <button type="button" class="btn-primary" [routerLink]="['/concursos/novo']">
+      Cadastrar novo concurso
+    </button>
+
+    <div class="auth-links">
+      <a routerLink="/painel">Voltar ao painel</a>
+    </div>
+  </div>
+</main>

@@ -1,0 +1,101 @@
+<main class="auth-layout">
+  <div class="auth-card">
+    <h1>Cadastrar concurso</h1>
+    <p class="subtitle">Informe os dados do concurso que voce quer acompanhar.</p>
+
+    @if (errorMessage()) {
+      <p class="form-error" role="alert">{{ errorMessage() }}</p>
+    }
+
+    <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      <div class="form-field">
+        <label for="orgao">Orgao</label>
+        <input
+          id="orgao"
+          type="text"
+          formControlName="orgao"
+          [attr.aria-invalid]="form.controls.orgao.invalid && form.controls.orgao.touched"
+        />
+        @if (form.controls.orgao.invalid && form.controls.orgao.touched) {
+          <span class="field-error">Informe o orgao responsavel.</span>
+        }
+      </div>
+
+      <div class="form-field">
+        <label for="bancaOrganizadora">Banca organizadora</label>
+        <input
+          id="bancaOrganizadora"
+          type="text"
+          formControlName="bancaOrganizadora"
+          [attr.aria-invalid]="
+            form.controls.bancaOrganizadora.invalid && form.controls.bancaOrganizadora.touched
+          "
+        />
+        @if (form.controls.bancaOrganizadora.invalid && form.controls.bancaOrganizadora.touched) {
+          <span class="field-error">Informe a banca organizadora.</span>
+        }
+      </div>
+
+      <div class="form-field">
+        <label for="cargo">Cargo</label>
+        <input
+          id="cargo"
+          type="text"
+          formControlName="cargo"
+          [attr.aria-invalid]="form.controls.cargo.invalid && form.controls.cargo.touched"
+        />
+        @if (form.controls.cargo.invalid && form.controls.cargo.touched) {
+          <span class="field-error">Informe o cargo pretendido.</span>
+        }
+      </div>
+
+      <div class="form-field">
+        <label for="numeroEdital">Numero do edital</label>
+        <input id="numeroEdital" type="text" formControlName="numeroEdital" />
+      </div>
+
+      <div class="form-field">
+        <label for="dataProva">Data da prova</label>
+        <input id="dataProva" type="date" formControlName="dataProva" />
+      </div>
+
+      <div class="form-field">
+        <label for="escolaridade">Escolaridade exigida</label>
+        <select id="escolaridade" formControlName="escolaridade">
+          <option value="">Nao informado</option>
+          @for (level of educationLevels; track level.value) {
+            <option [value]="level.value">{{ level.label }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="form-field">
+        <label for="disciplinas">Disciplinas (uma por linha)</label>
+        <textarea id="disciplinas" formControlName="disciplinas" rows="4"></textarea>
+      </div>
+
+      <div class="form-field">
+        <label for="quantidadeVagas">Quantidade de vagas</label>
+        <input id="quantidadeVagas" type="number" min="1" formControlName="quantidadeVagas" />
+      </div>
+
+      <div class="form-field">
+        <label for="linkOficial">Link oficial</label>
+        <input
+          id="linkOficial"
+          type="text"
+          formControlName="linkOficial"
+          placeholder="https://..."
+        />
+      </div>
+
+      <button type="submit" class="btn-primary" [disabled]="submitting()">
+        {{ submitting() ? 'Salvando...' : 'Cadastrar concurso' }}
+      </button>
+    </form>
+
+    <div class="auth-links">
+      <a routerLink="/concursos">Voltar para meus concursos</a>
+    </div>
+  </div>
+</main>

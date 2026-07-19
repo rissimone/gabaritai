@@ -5,7 +5,7 @@ import com.gabaritai.edital.domain.ConcursoStatus;
 import com.gabaritai.edital.domain.EducationLevel;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 public record ConcursoResponse(
@@ -16,7 +16,7 @@ public record ConcursoResponse(
         String numeroEdital,
         LocalDate dataProva,
         EducationLevel escolaridade,
-        List<String> disciplinas,
+        Set<String> disciplinas,
         Integer quantidadeVagas,
         String linkOficial,
         ConcursoStatus status,

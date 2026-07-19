@@ -9,13 +9,13 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.UUID;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -56,11 +56,13 @@ public class Concurso {
 
     // EAGER: colecao pequena sempre necessaria ao serializar a resposta, fora da transacao
     // do service (mesmo ajuste feito em UserProfile.learningPreferences, ver user-service).
+    // Set (nao List): a chave primaria da tabela e (concurso_id, disciplina), entao nao ha
+    // coluna de ordem — um @OrderColumn apontando para a mesma coluna do elemento quebra o
+    // mapeamento do Hibernate (duas propriedades para a mesma coluna).
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "concurso_disciplinas", joinColumns = @JoinColumn(name = "concurso_id"))
     @Column(name = "disciplina")
-    @OrderColumn(name = "disciplina")
-    private List<String> disciplinas = new ArrayList<>();
+    private Set<String> disciplinas = new LinkedHashSet<>();
 
     @Column(name = "quantidade_vagas")
     private Integer quantidadeVagas;
@@ -97,7 +99,7 @@ public class Concurso {
             String numeroEdital,
             LocalDate dataProva,
             EducationLevel escolaridade,
-            List<String> disciplinas,
+            Collection<String> disciplinas,
             Integer quantidadeVagas,
             String linkOficial,
             ConcursoStatus status) {
@@ -109,7 +111,7 @@ public class Concurso {
         this.numeroEdital = numeroEdital;
         this.dataProva = dataProva;
         this.escolaridade = escolaridade;
-        this.disciplinas = disciplinas != null ? new ArrayList<>(disciplinas) : new ArrayList<>();
+        this.disciplinas = disciplinas != null ? new LinkedHashSet<>(disciplinas) : new LinkedHashSet<>();
         this.quantidadeVagas = quantidadeVagas;
         this.linkOficial = linkOficial;
         this.status = status != null ? status : ConcursoStatus.PREVISTO;
@@ -147,7 +149,7 @@ public class Concurso {
         return escolaridade;
     }
 
-    public List<String> getDisciplinas() {
+    public Set<String> getDisciplinas() {
         return disciplinas;
     }
 

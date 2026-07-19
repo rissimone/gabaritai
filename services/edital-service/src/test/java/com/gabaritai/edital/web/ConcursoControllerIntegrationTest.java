@@ -73,7 +73,8 @@ class ConcursoControllerIntegrationTest extends AbstractIntegrationTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().status()).isEqualTo(ConcursoStatus.PREVISTO);
-        assertThat(response.getBody().disciplinas()).containsExactly("Direito Constitucional", "Portugues");
+        assertThat(response.getBody().disciplinas())
+                .containsExactlyInAnyOrder("Direito Constitucional", "Portugues");
     }
 
     @Test

@@ -46,5 +46,21 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/profile/profile.component').then((m) => m.ProfileComponent),
   },
+  {
+    path: 'concursos',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/concursos/concurso-list/concurso-list.component').then(
+        (m) => m.ConcursoListComponent,
+      ),
+  },
+  {
+    path: 'concursos/novo',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/concursos/concurso-form/concurso-form.component').then(
+        (m) => m.ConcursoFormComponent,
+      ),
+  },
   { path: '**', redirectTo: 'login' },
 ];

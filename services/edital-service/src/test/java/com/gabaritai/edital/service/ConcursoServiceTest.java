@@ -55,7 +55,7 @@ class ConcursoServiceTest {
         assertThat(result.getUserId()).isEqualTo(userId);
         assertThat(result.getOrgao()).isEqualTo("Tribunal X");
         assertThat(result.getStatus()).isEqualTo(ConcursoStatus.PREVISTO);
-        assertThat(result.getDisciplinas()).containsExactly("Direito Constitucional", "Portugues");
+        assertThat(result.getDisciplinas()).containsExactlyInAnyOrder("Direito Constitucional", "Portugues");
     }
 
     @Test
